@@ -1,0 +1,10 @@
+.classpath
+.gradle/
+.idea/
+.project
+.settings/
+.vertx/
+.vscode/
+bin/
+build/
+out/
