@@ -21,28 +21,6 @@ final class Environment {
 
     }
 
-    public static boolean getBoolean(final String name,
-                                     final boolean defaultValue) {
-        final String value = System.getenv(name);
-
-        if (value != null) {
-            return Boolean.parseBoolean(value);
-        } else {
-            return defaultValue;
-        }
-    }
-
-    public static int getInteger(final String name,
-                                 final int defaultValue) {
-        final String value = System.getenv(name);
-
-        try {
-            return Integer.parseInt(value);
-        } catch (final NumberFormatException ex) {
-            return defaultValue;
-        }
-    }
-
     public static String getString(final String name,
                                    final String defaultValue) {
         final String value = System.getenv(name);

@@ -5,6 +5,7 @@ plugins {
 }
 
 dependencies {
+    compile 'io.vertx:vertx-config:3.4.2'
     compile 'io.vertx:vertx-core:3.4.2'
     compile 'io.vertx:vertx-dropwizard-metrics:3.4.2'
     compile 'ch.qos.logback:logback-classic:1.2.3'

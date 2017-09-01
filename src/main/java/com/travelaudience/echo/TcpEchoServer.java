@@ -19,7 +19,11 @@ package com.travelaudience.echo;
 import static io.vertx.core.logging.LoggerFactory.LOGGER_DELEGATE_FACTORY_CLASS_NAME;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
+import io.vertx.config.ConfigRetriever;
+import io.vertx.config.ConfigRetrieverOptions;
+import io.vertx.config.ConfigStoreOptions;
 import io.vertx.core.AbstractVerticle;
+import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Vertx;
 import io.vertx.core.VertxOptions;
 import io.vertx.core.json.JsonObject;
@@ -39,9 +43,7 @@ import java.util.concurrent.ScheduledExecutorService;
 public final class TcpEchoServer extends AbstractVerticle {
     private static final Logger LOGGER = LoggerFactory.getLogger(TcpEchoServer.class);
 
-    private static final boolean DEBUG = Environment.getBoolean("DEBUG", false);
-    private static final String HOST = Environment.getString("HOST", "0.0.0.0");
-    private static final int PORT = Environment.getInteger("PORT", 7);
+    private static final String PATH_TO_CONFIG = System.getenv("PATH_TO_CONFIG");
 
     private static final int DUMP_METRICS_INTERVAL_MS = 2000;
 
@@ -51,18 +53,47 @@ public final class TcpEchoServer extends AbstractVerticle {
     }
 
     public static void main(final String... args) {
+        if (PATH_TO_CONFIG == null) {
+            LOGGER.error("PATH_TO_CONFIG is not set.");
+            System.exit(1);
+        }
+
         // Enable metrics.
         final MetricsOptions metricsOptions = new DropwizardMetricsOptions().setEnabled(true);
-        // Create a new Vertx instance and deploy our verticle.
-        Vertx.vertx(new VertxOptions().setMetricsOptions(metricsOptions)).deployVerticle(new TcpEchoServer());
+        // Create a new Vertx instance.
+        final Vertx vertx = Vertx.vertx(new VertxOptions().setMetricsOptions(metricsOptions));
+
+        // Create our 'ConfigStoreOptions'.
+        final ConfigStoreOptions configOptions = new ConfigStoreOptions()
+                .setType("file")
+                .setConfig(new JsonObject().put("path", PATH_TO_CONFIG));
+        // Create our 'ConfigurationRetriever'.
+        final ConfigRetriever configRetriever = ConfigRetriever.create(
+                vertx,
+                new ConfigRetrieverOptions().addStore(configOptions)
+        );
+
+        // Grab the config and deploy our verticle.
+        configRetriever.getConfig(res -> {
+            if (res.succeeded()) {
+                LOGGER.info("using configuration from {}", PATH_TO_CONFIG);
+                vertx.deployVerticle(new TcpEchoServer(), new DeploymentOptions().setConfig(res.result()));
+            } else {
+                LOGGER.error("couldn't read the configuration file", res.cause());
+                vertx.close();
+            }
+        });
     }
 
     @Override
     public void start() throws Exception {
-        // Create a 'NetServer' that echoes data back to the origin, and make it listen on HOST:PORT.
-        createNetServer().connectHandler(this::handleConnection).listen(PORT, HOST, res -> {
+        final String host = config().getString("host");
+        final int port = config().getInteger("port");
+
+        // Create a 'NetServer' that echoes data back to the origin, and make it listen on host:port.
+        createNetServer().connectHandler(this::handleConnection).listen(port, host, res -> {
             if (res.succeeded()) {
-                LOGGER.info("tcp echo server is listening at {}:{}", HOST, PORT);
+                LOGGER.info("tcp echo server is listening at {}:{}", host, port);
             } else {
                 LOGGER.error("echo server failed to start", res.cause());
             }
@@ -79,7 +110,7 @@ public final class TcpEchoServer extends AbstractVerticle {
     private NetServer createNetServer() {
         final NetServer server = vertx.createNetServer();
 
-        if (DEBUG) {
+        if (config().getBoolean("debug")) {
             // Create a 'MetricsService' for the underlying Vertx instance.
             final MetricsService metrics = MetricsService.create(this.vertx);
             // Create a 'ScheduledExecutorService' with which to dump metrics in background.
@@ -96,7 +127,7 @@ public final class TcpEchoServer extends AbstractVerticle {
     private void handleConnection(final NetSocket socket) {
         Pump.pump(socket, socket).start();
 
-        if (DEBUG) {
+        if (config().getBoolean("debug")) {
             LOGGER.debug("connection from {} is now open", socket.remoteAddress());
             socket.closeHandler((v) -> LOGGER.debug("connection from {} is now closed", socket.remoteAddress()));
         }
